@@ -43,7 +43,7 @@ def _safe_remove_path(path):
         logger.debug('Skip cleanup path %s because %s' % (path, str(e)))
 
 
-def cleanup_submission_artifacts(base_dir, email_labname):
+def cleanup_submission_artifacts(base_dir, email_labname, tmp_root=None):
     """
     Clean per-submission artifacts only.
     This avoids deleting shared temporary files of other concurrent requests.
@@ -51,7 +51,7 @@ def cleanup_submission_artifacts(base_dir, email_labname):
     if not email_labname:
         return
 
-    tmp_root = os.path.join(base_dir, 'tmp')
+    tmp_root = tmp_root or os.path.join(base_dir, 'tmp')
     labtainer_dir = os.path.join(tmp_root, 'labtainer')
     labs_extracted_dir = os.path.join(tmp_root, 'labs_extracted')
 
@@ -229,9 +229,9 @@ def store_student_unique(uniquejson, email_labname, uniquevalues):
 
 
 # Make sure second level zip file e-mail is OK
-def Check_SecondLevel_EmailWatermark_OK(gradesjson, email_labname, student_id, zipoutput):
+def Check_SecondLevel_EmailWatermark_OK(gradesjson, email_labname, student_id, zipoutput, tmpdir):
     check_result = True
-    TMPDIR = "/tmp/labtainer"
+    TMPDIR = tmpdir
     TempEmailFile = "%s/.local/.email" % TMPDIR
     TempWatermarkFile = "%s/.local/.watermark" % TMPDIR
     TempSeedFile = "%s/.local/.seed" % TMPDIR
@@ -323,9 +323,10 @@ def instructor_grade_lab(lab_filename):
         # sys.exit(1)
         return 'wrong_input_file'
 
-    LAB_FOLDER = os.path.normpath(MYHOME + '/tmp/labs') # MYHOME/tmp/labs
-    TMPDIR = os.path.normpath(MYHOME + '/tmp/labtainer') # MYHOME/tmp/labtainer
-    LAB_EXTRACTED_FOLDER = os.path.normpath(MYHOME + '/tmp/labs_extracted') # MYHOME/tmp/labs_extracted
+    # lab_filename is expected to live in a per-request workspace folder.
+    lab_parent_dir = os.path.dirname(os.path.abspath(lab_filename))
+    TMPDIR = os.path.normpath(os.path.join(lab_parent_dir, 'labtainer'))
+    LAB_EXTRACTED_FOLDER = os.path.normpath(os.path.join(lab_parent_dir, 'labs_extracted'))
     checkwork_arg = None
     checkwork = False
     check_watermark = True
@@ -368,10 +369,10 @@ def instructor_grade_lab(lab_filename):
     orig_email_labname, orig_zipext = zip_file_name.rsplit('.', 1) # b25dcat057.tcpip
 
     # Clean previous remnants for this exact submission only.
-    cleanup_submission_artifacts(MYHOME, orig_email_labname)
+    cleanup_submission_artifacts(MYHOME, orig_email_labname, tmp_root=lab_parent_dir)
 
     first_level_zip.append(zip_file_name) # first_level_zip = [b25dcat057.tcpip.lab]
-    OutputName = os.path.join(LAB_FOLDER, zip_file_name) # MYHOME/tmp/labs/b25dcat057.tcpip.lab
+    OutputName = os.path.normpath(lab_filename)
     zipoutput = zipfile.ZipFile(OutputName, "r") # mo file zip de extract vao thu muc tmp/labtainer
     ''' retain dates of student files '''
     for zi in zipoutput.infolist(): # duyet tung file trong zip
@@ -457,7 +458,7 @@ def instructor_grade_lab(lab_filename):
         # Do Watermark checks only if check_watermark is True
         if check_watermark:
             # If e-mail mismatch, do not further extract the zip file
-            if not Check_SecondLevel_EmailWatermark_OK(gradesjson, email_labname, student_id, zipoutput):
+            if not Check_SecondLevel_EmailWatermark_OK(gradesjson, email_labname, student_id, zipoutput, TMPDIR):
                 # continue with next one
                 continue
 
@@ -897,4 +898,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-
